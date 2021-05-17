@@ -54,12 +54,13 @@ object EsUtils {
     }
 
     //批量插入
-    def bulkIndex(sourceList:List[Any], esIndex:String): Unit = {
+    def bulkIndex(sourceList:List[(String,Any)], esIndex:String): Unit = {
         if (sourceList != null && sourceList.size>0){
             val jestClient: JestClient = getConn()
             val bulkBuilder = new Bulk.Builder
-            for (source <- sourceList) {
-                val insert: Index = new Index.Builder(source).index(esIndex).`type`("_doc").build()
+            for ((mid,source) <- sourceList) {
+                //利用ES的id进行幂等性处理
+                val insert: Index = new Index.Builder(source).index(esIndex).`type`("_doc").id(mid).build()
                 bulkBuilder.addAction(insert)
             }
             val result: BulkResult = jestClient.execute(bulkBuilder.build())

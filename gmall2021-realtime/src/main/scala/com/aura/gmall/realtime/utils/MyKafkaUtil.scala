@@ -28,7 +28,7 @@ object MyKafkaUtil {
         //如果偏移量没有保存或者初始化，可以使用如下配置，latest自动重置偏移量为最新
         "auto.offset.reset" -> "latest",
         //是否自动提交偏移量，false为手动维护
-        "enable.auto.commit" -> (true: java.lang.Boolean)
+        "enable.auto.commit" -> (false: java.lang.Boolean)
     )
     // 创建DStream，返回接收到的输入数据
     // LocationStrategies：根据给定的主题和集群地址创建consumer

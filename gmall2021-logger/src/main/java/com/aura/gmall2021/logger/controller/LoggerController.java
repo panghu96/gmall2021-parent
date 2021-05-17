@@ -25,13 +25,13 @@ public class LoggerController {
         log.info(logString);
         //分流
         JSONObject jsonObject = JSONObject.parseObject(logString);
-        //启动日志
+        // 启动日志
         if (jsonObject.getString("start") != null && jsonObject.getString("start").length() > 0) {
             kafka.send("GMALL2021_START_LOG", jsonObject.getString("mid"), logString);
         } else {
             //事件日志
             kafka.send("GMALL2021_EVENT_LOG", jsonObject.getString("mid"), logString);
         }
-        return "success";
+        return logString;
     }
 }
