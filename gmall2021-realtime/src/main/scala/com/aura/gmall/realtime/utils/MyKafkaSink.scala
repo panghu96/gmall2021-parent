@@ -1,7 +1,11 @@
+package com.aura.gmall.realtime.utils
+
 import java.util.Properties
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
-import com.aura.gmall.realtime.utils.PropertyUtils
 
+/**
+  * 推送数据到kafka的工具类
+  */
 object MyKafkaSink {
     private val properties: Properties = PropertyUtils.load("config.properties")
     val broker_list = properties.getProperty("kafka.broker.list")
