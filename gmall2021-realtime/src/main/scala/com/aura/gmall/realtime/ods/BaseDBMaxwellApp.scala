@@ -59,10 +59,14 @@ object BaseDBMaxwellApp {
                         for (jsonObj <- jsonObjList) {
                             val tableName: String = jsonObj.getString("table")
                             val msg: String = jsonObj.getString("data")
-                            val topic = "ODS_" + tableName.toUpperCase
-                            println(msg)
-                            //发送数据到kafka
-                            MyKafkaSink.send(topic, msg)
+                            //排除maxwell bootstrap时首尾的空数据
+                            if (!jsonObj.getString("type").equals("bootstrap-start")&& !jsonObj.getString("type").equals("bootstrap-complete")) {
+                                val topic = "ODS_" + tableName.toUpperCase
+                                println(msg)
+                                //发送数据到kafka
+                                MyKafkaSink.send(topic, msg)
+                            }
+
                         }
 
                     }
