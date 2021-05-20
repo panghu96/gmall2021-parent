@@ -60,6 +60,7 @@ object BaseDBMaxwellApp {
                             val tableName: String = jsonObj.getString("table")
                             val msg: String = jsonObj.getString("data")
                             val topic = "ODS_" + tableName.toUpperCase
+                            println(msg)
                             //发送数据到kafka
                             MyKafkaSink.send(topic, msg)
                         }
