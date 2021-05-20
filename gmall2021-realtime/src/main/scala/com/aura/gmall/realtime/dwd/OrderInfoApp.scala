@@ -1,12 +1,14 @@
 package com.aura.gmall.realtime.dwd
 
 import com.alibaba.fastjson.{JSON, JSONObject}
-import com.aura.gmall.realtime.bean.{OrderInfo, UserState}
+import com.aura.gmall.realtime.bean.{OrderInfo, ProvinceInfo, UserState}
 import com.aura.gmall.realtime.utils.{MyKafkaUtil, OffsetManager, PhoenixUtil}
 import org.apache.hadoop.conf.Configuration
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.TopicPartition
 import org.apache.spark.SparkConf
+import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream.{DStream, InputDStream}
 import org.apache.spark.streaming.kafka010.{HasOffsetRanges, OffsetRange}
 import org.apache.spark.streaming.{Seconds, StreamingContext}
@@ -128,12 +130,53 @@ object OrderInfoApp {
                     new Configuration(),
                     Some("hadoop102,hadoop103,hadoop104:2181"))
 
+            }
+        )
+
+        //合并维度表
+        //维度表的数据如果不多，而且维度表的数据使用比比较大，可以做广播变量，不用每个Executor都去HBase中查询维度表，提升性能
+        orderInfoDStream.foreachRDD(
+            rdd=> {
+                //这里的代码在Driver端执行，而且每个批次执行一次，防止维度表更新
+                val sql = " select ID,NAME,REGION_ID,AREA_CODE,ISO_CODE from PROVINCE_INFO0105"
+                val jsonObjList: List[JSONObject] = PhoenixUtil.queryList(sql)
+                //转为map，方便匹配查询
+                val provinceMap: Map[String, ProvinceInfo] = jsonObjList.map(
+                    jsonObj => {
+                        val provinceInfo = ProvinceInfo(
+                            jsonObj.getString("ID"),
+                            jsonObj.getString("NAME"),
+                            jsonObj.getString("REGION_ID"),
+                            jsonObj.getString("AREA_CODE"),
+                            jsonObj.getString("ISO_CODE")
+                        )
+                        (provinceInfo.id, provinceInfo)
+                    }
+                ).toMap
+                //广播
+                val provinceMapBroadcast: Broadcast[Map[String, ProvinceInfo]] = ssc.sparkContext.broadcast(provinceMap)
+
+                val orderInfoWithProvince: RDD[OrderInfo] = rdd.map(
+                    orderInfo => {
+                        val provinceMap: Map[String, ProvinceInfo] = provinceMapBroadcast.value
+                        val provinceInfo: ProvinceInfo = provinceMap.getOrElse(orderInfo.province_id.toString, null)
+                        if (provinceInfo != null) {
+                            orderInfo.province_name = provinceInfo.name
+                            orderInfo.province_area_code = provinceInfo.area_code
+                            orderInfo.province_iso_code = provinceInfo.iso_code
+                        }
+                        orderInfo
+                    }
+                )
+                //orderInfoWithProvince
+
                 //存储偏移量
-                if (offsetRanges != null && offsetRanges.length > 0) {
-                    OffsetManager.submitOffset(topicName, groupId, offsetRanges)
+                if (offsetRanges != null) {
+                    OffsetManager.submitOffset(topicName,groupId,offsetRanges)
                 }
             }
         )
+
 
 
 
