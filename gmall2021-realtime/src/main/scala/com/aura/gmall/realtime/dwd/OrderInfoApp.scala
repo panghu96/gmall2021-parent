@@ -1,8 +1,9 @@
 package com.aura.gmall.realtime.dwd
 
+import com.alibaba.fastjson.serializer.SerializeConfig
 import com.alibaba.fastjson.{JSON, JSONObject}
 import com.aura.gmall.realtime.bean.{OrderInfo, ProvinceInfo, UserState}
-import com.aura.gmall.realtime.utils.{MyKafkaUtil, OffsetManager, PhoenixUtil}
+import com.aura.gmall.realtime.utils.{MyKafkaSink, MyKafkaUtil, OffsetManager, PhoenixUtil}
 import org.apache.hadoop.conf.Configuration
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.TopicPartition
@@ -56,6 +57,8 @@ object OrderInfoApp {
                 orderInfo
             }
         )
+        //orderInfoDStream多次使用，可以做缓存，避免重复计算
+        orderInfoDStream.cache()
 
         //获取HBase中的用户状态，和本批次数据流中的用户做匹配
         val orderFirstDStream: DStream[OrderInfo] = orderInfoDStream.mapPartitions(
@@ -168,7 +171,15 @@ object OrderInfoApp {
                         orderInfo
                     }
                 )
-                //orderInfoWithProvince
+                //订单信息存储到kafkaDWD层
+                orderInfoWithProvince.foreach(
+                    orderInfo => {
+                        //解决scala对象转为json字符串报错
+                        val msg: String = JSON.toJSONString(orderInfo,new SerializeConfig(true))
+                        //println(msg)
+                        MyKafkaSink.send("DWD_ORDER_INFO",msg)
+                    }
+                )
 
                 //存储偏移量
                 if (offsetRanges != null) {
