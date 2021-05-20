@@ -127,13 +127,15 @@ object OrderInfoApp {
                     Seq("USER_ID","IF_CONSUMED"),
                     new Configuration(),
                     Some("hadoop102,hadoop103,hadoop104:2181"))
+
+                //存储偏移量
+                if (offsetRanges != null && offsetRanges.length > 0) {
+                    OffsetManager.submitOffset(topicName, groupId, offsetRanges)
+                }
             }
         )
 
-        //存储偏移量
-        if (offsetRanges != null && offsetRanges.length > 0) {
-            OffsetManager.submitOffset(topicName, groupId, offsetRanges)
-        }
+
 
         ssc.start()
         ssc.awaitTermination()
