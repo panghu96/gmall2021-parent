@@ -57,7 +57,6 @@
             <version>2.9.0</version>
         </dependency>
 
-
         <dependency>
             <groupId>org.apache.phoenix</groupId>
             <artifactId>phoenix-spark</artifactId>

@@ -2,7 +2,7 @@ package com.aura.gmall.realtime.dwd
 
 import com.alibaba.fastjson.serializer.SerializeConfig
 import com.alibaba.fastjson.{JSON, JSONObject}
-import com.aura.gmall.realtime.bean.{OrderInfo, ProvinceInfo, UserState}
+import com.aura.gmall.realtime.bean.{OrderInfo, ProvinceInfo, UserInfo, UserState}
 import com.aura.gmall.realtime.utils.{MyKafkaSink, MyKafkaUtil, OffsetManager, PhoenixUtil}
 import org.apache.hadoop.conf.Configuration
 import org.apache.kafka.clients.consumer.ConsumerRecord
@@ -17,7 +17,7 @@ import org.apache.spark.streaming.{Seconds, StreamingContext}
 /**
   * Author:panghu
   * Date:2021-05-19
-  * Description: 判断当日新增付费用户是否首次下单，并标记
+  * Description: 判断当日新增付费用户是否首次下单，并标记；订单信息推到kafka DWD层
   */
 object OrderInfoApp {
     def main(args: Array[String]): Unit = {
@@ -156,8 +156,28 @@ object OrderInfoApp {
                         (provinceInfo.id, provinceInfo)
                     }
                 ).toMap
+
+                //查询userInfo
+                val userInfoSql = "select ID,USER_LEVEL,BIRTHDAY,GENDER,USER_AGE_GROUP,GENDER_NAME from USER_INFO0105"
+                val userInfoJsonList: List[JSONObject] = PhoenixUtil.queryList(userInfoSql)
+                val userInfoMap: Map[Long, UserInfo] = userInfoJsonList.map(
+                    userInfoJson => {
+                        val userInfo = UserInfo(
+                            userInfoJson.getLong("ID"),
+                            userInfoJson.getString("USER_LEVEL"),
+                            userInfoJson.getString("BIRTHDAY"),
+                            userInfoJson.getString("GENDER"),
+                            userInfoJson.getString("USER_AGE_GROUP"),
+                            userInfoJson.getString("GENDER_NAME")
+                        )
+                        (userInfo.id, userInfo)
+                    }
+                ).toMap
+
+
                 //广播
                 val provinceMapBroadcast: Broadcast[Map[String, ProvinceInfo]] = ssc.sparkContext.broadcast(provinceMap)
+                val userInfoMapBroadcast: Broadcast[Map[Long, UserInfo]] = ssc.sparkContext.broadcast(userInfoMap)
 
                 val orderInfoWithProvince: RDD[OrderInfo] = rdd.map(
                     orderInfo => {
@@ -168,6 +188,14 @@ object OrderInfoApp {
                             orderInfo.province_area_code = provinceInfo.area_code
                             orderInfo.province_iso_code = provinceInfo.iso_code
                         }
+
+                        val userInfoMap: Map[Long, UserInfo] = userInfoMapBroadcast.value
+                        val userInfo: UserInfo = userInfoMap.getOrElse(orderInfo.user_id,null)
+                        if (userInfo != null) {
+                            orderInfo.user_gender = userInfo.gender_name
+                            orderInfo.user_age_group = userInfo.user_age_group
+                        }
+
                         orderInfo
                     }
                 )
@@ -177,7 +205,7 @@ object OrderInfoApp {
                         //解决scala对象转为json字符串报错
                         val msg: String = JSON.toJSONString(orderInfo,new SerializeConfig(true))
                         //println(msg)
-                        MyKafkaSink.send("DWD_ORDER_INFO",msg)
+                        MyKafkaSink.send("DWD_GMALL_ORDER_INFO",orderInfo.id.toString,msg)
                     }
                 )
 
