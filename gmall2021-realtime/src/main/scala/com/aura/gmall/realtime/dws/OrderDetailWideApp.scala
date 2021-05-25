@@ -3,11 +3,13 @@ package com.aura.gmall.realtime.dws
 import com.alibaba.fastjson.JSON
 import com.alibaba.fastjson.serializer.SerializeConfig
 import com.aura.gmall.realtime.bean.{OrderDetail, OrderDetailWide, OrderInfo}
-import com.aura.gmall.realtime.utils.{MyKafkaUtil, OffsetManager, RedisUtil}
+import com.aura.gmall.realtime.utils.{MyKafkaSink, MyKafkaUtil, OffsetManager, RedisUtil}
+import java.util.Properties
 import java.{lang, util}
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.TopicPartition
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 import org.apache.spark.streaming.dstream.{DStream, InputDStream}
 import org.apache.spark.streaming.kafka010.{HasOffsetRanges, OffsetRange}
 import org.apache.spark.streaming.{Seconds, StreamingContext}
@@ -140,7 +142,6 @@ object OrderDetailWideApp {
             }
         )
         orderDetailWideFilterDStream.cache()
-        orderDetailWideFilterDStream.print(1000)
 
         //==== 求订单每件商品的实付分摊金额 ====
         val orderSplitAmountDStream: DStream[OrderDetailWide] = orderDetailWideFilterDStream.mapPartitions(
@@ -178,8 +179,11 @@ object OrderDetailWideApp {
                     jedis.hset(redisKey, "other_split_amount", otherSplitToRedis.toString)
 
                     //【其他商品原始金额总和】
-                    val otherOriginToRedis: Double = otherOriginAmount.toDouble + orderDetailWide.sku_price * orderDetailWide.sku_num
+                    val otherOriginToRedis: Double = otherOriginAmount.toDouble + orderDetailWide.sku_price *
+                            orderDetailWide.sku_num
                     jedis.hset(redisKey, "other_origin_amount", otherOriginToRedis.toString)
+
+
                 }
 
 
@@ -188,13 +192,33 @@ object OrderDetailWideApp {
             }
 
         )
+        orderSplitAmountDStream.cache()
+        orderSplitAmountDStream.map(order => JSON.toJSONString(order, new SerializeConfig(true))).print(1000)
 
-        orderSplitAmountDStream.map(order=>JSON.toJSONString(order, new SerializeConfig(true))).print(1000)
 
+        val sparkSession: SparkSession = SparkSession.builder()
+                .appName(this.getClass.getSimpleName)
+                .getOrCreate()
 
-        //提交偏移量
-        orderDetailWideFilterDStream.foreachRDD(
+        import sparkSession.implicits._
+        //写入click house，提交偏移量
+        orderSplitAmountDStream.foreachRDD(
             rdd => {
+                val df: DataFrame = rdd.toDF()
+                df.write.mode(SaveMode.Append)
+                        .option("batchsize", "100") //每批次条数
+                        .option("isolationLevel", "NONE") // 设置事务
+                        .option("numPartitions", "4") // 设置并发
+                        .option("driver", "ru.yandex.clickhouse.ClickHouseDriver")
+                        .jdbc("jdbc:clickhouse://hadoop102:8123/test0105", "order_wide0105", new Properties())
+                rdd.foreach(
+                    orderDetailWide => {
+                        //数据推到ads层
+                        MyKafkaSink.send("ADS_ORDER_WIDE",orderDetailWide.order_id.toString,
+                            JSON.toJSONString(orderDetailWide,new SerializeConfig(true)))
+                    }
+                )
+
                 if (orderOffsetRanges.nonEmpty) {
                     OffsetManager.submitOffset(orderTopic, orderGroupId, orderOffsetRanges)
                 }

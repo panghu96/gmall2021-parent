@@ -87,11 +87,11 @@
             <version>4.5.2</version>
         </dependency>
 
-        <dependency>
-            <groupId>org.codehaus.janino</groupId>
-            <artifactId>commons-compiler</artifactId>
-            <version>2.7.8</version>
-        </dependency>
+        <!--<dependency>-->
+            <!--<groupId>org.codehaus.janino</groupId>-->
+            <!--<artifactId>commons-compiler</artifactId>-->
+            <!--<version>2.7.8</version>-->
+        <!--</dependency>-->
 
 
         <!-- https://mvnrepository.com/artifact/org.elasticsearch/elasticsearch -->
@@ -99,6 +99,28 @@
             <groupId>org.elasticsearch</groupId>
             <artifactId>elasticsearch</artifactId>
             <version>2.4.6</version>
+        </dependency>
+        <dependency>
+            <groupId>ru.yandex.clickhouse</groupId>
+            <artifactId>clickhouse-jdbc</artifactId>
+            <version>0.1.55</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.scalikejdbc</groupId>
+            <artifactId>scalikejdbc_2.11</artifactId>
+            <version>2.5.0</version>
+        </dependency>
+        <!-- scalikejdbc-config_2.11 -->
+        <dependency>
+            <groupId>org.scalikejdbc</groupId>
+            <artifactId>scalikejdbc-config_2.11</artifactId>
+            <version>2.5.0</version>
+        </dependency>
+        <dependency>
+            <groupId>mysql</groupId>
+            <artifactId>mysql-connector-java</artifactId>
+            <version>5.1.47</version>
         </dependency>
 
     </dependencies>
